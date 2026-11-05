@@ -1,0 +1,6 @@
+{
+  "name": "SkyLedger – Flight Booking & Operations Portal",
+  "description": "Production-grade airline reservation and operations portal for university DBMS project with flight booking, live status, crew scheduling, delay ledger, and SQL showcase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

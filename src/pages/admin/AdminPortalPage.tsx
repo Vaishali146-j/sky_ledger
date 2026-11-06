@@ -10,6 +10,8 @@ import { BookingsAdmin } from './BookingsAdmin';
 import { ReportsAdmin } from './ReportsAdmin';
 import { SqlShowcase } from './SqlShowcase';
 import { ActivityLogAdmin } from './ActivityLogAdmin';
+import { TransactionSafetyLab } from './TransactionSafetyLab';
+import { AnalyticsHub } from './AnalyticsHub';
 import { apiClient } from '../../api/client';
 import {
   LayoutDashboard,
@@ -24,6 +26,8 @@ import {
   History,
   ShieldCheck,
   Lock,
+  Zap,
+  TrendingUp,
 } from 'lucide-react';
 
 export const AdminPortalPage: React.FC<{ initialSubTab?: string }> = ({ initialSubTab = 'dashboard' }) => {
@@ -44,9 +48,10 @@ export const AdminPortalPage: React.FC<{ initialSubTab?: string }> = ({ initialS
     { id: 'dashboard', label: 'Operations Dashboard', icon: LayoutDashboard },
     { id: 'flights', label: 'Flights Management', icon: Plane },
     { id: 'aircraft', label: 'Aircraft & Maintenance', icon: Wrench },
-    { id: 'crew', label: 'Crew Personnel', icon: Users },
-    { id: 'roster', label: 'Crew Roster & Conflict Checker', icon: CalendarDays },
+    { id: 'crew', label: 'Crew Personnel & Roster', icon: Users },
     { id: 'delays', label: 'Delay Ledger', icon: AlertTriangle },
+    { id: 'concurrency', label: 'Transaction Safety Lab', icon: Zap },
+    { id: 'analytics', label: 'BI Analytics Hub', icon: TrendingUp },
     { id: 'bookings', label: 'Bookings & Manifest', icon: Ticket },
     { id: 'reports', label: 'DBMS Reports (SQL)', icon: FileSpreadsheet },
     { id: 'sql-showcase', label: 'SQL Showcase & ER Diagram', icon: Database },
@@ -114,6 +119,8 @@ export const AdminPortalPage: React.FC<{ initialSubTab?: string }> = ({ initialS
         {activeSubTab === 'crew' && <CrewAdmin />}
         {activeSubTab === 'roster' && <CrewRosterAdmin />}
         {activeSubTab === 'delays' && <DelayLedgerAdmin />}
+        {activeSubTab === 'concurrency' && <TransactionSafetyLab />}
+        {activeSubTab === 'analytics' && <AnalyticsHub />}
         {activeSubTab === 'bookings' && <BookingsAdmin />}
         {activeSubTab === 'reports' && <ReportsAdmin />}
         {activeSubTab === 'sql-showcase' && <SqlShowcase />}

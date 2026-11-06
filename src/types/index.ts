@@ -186,3 +186,150 @@ export interface FlightSearchParams {
   travelClass: TravelClass;
   isRoundTrip: boolean;
 }
+
+export interface StatusMatrixCounts {
+  all: number;
+  onTime: number;
+  delayed: number;
+  cancelled: number;
+}
+
+export interface FlightOperationsSearchParams {
+  q?: string;
+  origin?: string;
+  destination?: string;
+  date_from?: string;
+  date_to?: string;
+  status?: FlightStatus | 'ALL';
+  sort?: string;
+  dir?: 'ASC' | 'DESC';
+  page?: number;
+  page_size?: number;
+}
+
+export interface FlightOperationsResponse {
+  flights: Flight[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  status_counts: StatusMatrixCounts;
+  sql_used?: string;
+  execution_ms?: number;
+}
+
+export interface FlightDetailEnriched extends Flight {
+  aircraft_details?: Aircraft | null;
+  airworthiness_status?: 'Airworthy' | 'Upcoming' | 'Overdue';
+  days_since_maintenance?: number | null;
+  delay_history?: DelayRecord[];
+  assigned_crew?: CrewAssignmentEnriched[];
+  total_delay_minutes?: number;
+  sql_used?: string;
+  execution_ms?: number;
+}
+
+export interface DelaySummaryStats {
+  total_incidents: number;
+  total_delay_minutes: number;
+  avg_delay_minutes: number;
+  most_impacted_hub: string;
+  reason_breakdown: Array<{
+    reason_code: DelayReasonCode;
+    incident_count: number;
+    total_minutes: number;
+    avg_minutes: number;
+  }>;
+  sql_used?: string;
+  execution_ms?: number;
+}
+
+export interface CrewAvailabilityItem extends CrewMember {
+  is_available: boolean;
+  availability_status: 'Available' | 'Busy' | 'Rest Violation';
+  conflict_details?: string;
+}
+
+export interface CrewWorkloadItem {
+  crew_id: number;
+  full_name: string;
+  role: CrewRole;
+  base_airport_id: string | null;
+  base_city?: string;
+  total_flights: number;
+  total_duty_hours: number;
+  last_duty_time?: string;
+  relative_utilization_pct: number;
+}
+
+export interface TransactionStepLog {
+  timestamp: number;
+  step: number;
+  query: string;
+  status: 'OK' | 'LOCK_ACQUIRED' | 'CHECKING' | 'INSERTED' | 'COMMITTED' | 'CONFLICT' | 'REST_VIOLATION' | 'FAIL' | 'ERROR';
+  notes: string;
+}
+
+export interface TransactionAssignResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  assignment_id?: number;
+  logs: TransactionStepLog[];
+  execution_ms?: number;
+}
+
+export interface RouteLeaderboardItem {
+  route: string;
+  origin_airport_id: string;
+  destination_airport_id: string;
+  destination_city: string;
+  total_flights: number;
+  delayed_flights: number;
+  delay_percentage: number;
+  avg_delay_minutes: number;
+  delay_rank: number;
+}
+
+export interface AircraftUtilizationItem {
+  tail_number: string;
+  model: string;
+  capacity: number;
+  last_maintenance_date: string;
+  days_since_maintenance: number;
+  total_flights: number;
+  total_flight_hours: number;
+  maintenance_status: 'Airworthy' | 'Upcoming' | 'Overdue';
+}
+
+export interface WindowMonthlyItem {
+  month_num: number;
+  month_name: string;
+  incident_count: number;
+  monthly_delay_mins: number;
+  cumulative_delay_mins: number;
+  moving_avg_3m: number;
+}
+
+export interface WindowDailyItem {
+  flight_date: string;
+  daily_flights: number;
+  moving_avg_7day: number;
+}
+
+export interface WindowAirportItem {
+  origin_airport_id: string;
+  month_num: number;
+  departures: number;
+  hub_running_total: number;
+}
+
+export interface WindowCrewItem {
+  crew_id: number;
+  full_name: string;
+  role: CrewRole;
+  base_airport_id: string | null;
+  total_duty_hours: number;
+  duty_percentile_rank: number;
+}
+

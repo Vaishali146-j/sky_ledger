@@ -9,6 +9,7 @@ import { PnrStatusPage } from './pages/PnrStatusPage';
 import { FlightStatusPage } from './pages/FlightStatusPage';
 import { AirportBoardPage } from './pages/AirportBoardPage';
 import { MyBookingsPage } from './pages/MyBookingsPage';
+import { FlightOperationsPage } from './pages/FlightOperationsPage';
 import { AdminPortalPage } from './pages/admin/AdminPortalPage';
 import { AuthModal } from './pages/AuthModal';
 import { VivaDemoGuide } from './components/VivaDemoGuide';
@@ -94,6 +95,11 @@ function AppContent() {
           />
         )}
 
+        {currentTab === 'operations' && (
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            <FlightOperationsPage />
+          </div>
+        )}
         {currentTab === 'flight-status' && <FlightStatusPage />}
         {currentTab === 'pnr-status' && <PnrStatusPage />}
         {currentTab === 'manage-booking' && <MyBookingsPage />}

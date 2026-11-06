@@ -195,6 +195,17 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onSelectTab }) => {
             </button>
 
             <button
+              onClick={() => onSelectTab('operations')}
+              className={`px-3 py-2 rounded transition-colors ${
+                currentTab === 'operations'
+                  ? 'bg-white/20 text-white font-bold border-b-2 border-[#F57C00]'
+                  : 'text-blue-100 hover:bg-white/10'
+              }`}
+            >
+              Flight Operations
+            </button>
+
+            <button
               onClick={() => onSelectTab('flight-status')}
               className={`px-3 py-2 rounded transition-colors ${
                 currentTab === 'flight-status'

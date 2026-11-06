@@ -1,6 +1,20 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { X, CheckCircle, ArrowRight, Database, Shield, Plane, AlertTriangle, Users, Award } from 'lucide-react';
+import {
+  X,
+  CheckCircle,
+  ArrowRight,
+  Database,
+  Shield,
+  Plane,
+  AlertTriangle,
+  Users,
+  Award,
+  Zap,
+  TrendingUp,
+  Clock,
+  Layers,
+} from 'lucide-react';
 
 interface VivaDemoGuideProps {
   onNavigateTab: (tab: string) => void;
@@ -17,70 +31,105 @@ export const VivaDemoGuide: React.FC<VivaDemoGuideProps> = ({ onNavigateTab }) =
       title: 'Home & Great-Circle Route Search',
       tab: 'search',
       concept: 'Haversine Great-Circle Formula & Fare Breakdown (5% GST)',
-      desc: 'Demonstrates deterministic fare calculation between NYC hubs (JFK/LGA/EWR) and 102 airports with 5% GST line item and interactive US route map.',
+      desc: 'Deterministic fare computation between NYC hubs (JFK/LGA/EWR) and 102 airports with distance calculation, class multipliers, and 5% GST line item.',
     },
     {
       num: 2,
-      title: 'Search Results, +/-3 Days Price Calendar & Delay Risk',
+      title: 'Search Results & +/-3 Days Dynamic Fare Calendar',
       tab: 'results',
-      concept: 'Complex Filtering, Sold-out Detection & Delay Prediction',
-      desc: 'Shows filtering by departure slots, status, sorting, sold-out seat checks, and the SQL aggregate-based delay risk hint (Low/Medium/High).',
+      concept: 'Multi-Criteria Relational Filter & Delay Prediction Hints',
+      desc: 'Shows filtering by departure slots, status, sorting, sold-out seat detection, and aggregate-based delay risk hint (Low/Medium/High).',
     },
     {
       num: 3,
       title: 'Booking Stepper & Top-Down Fuselage SVG Seat Map',
       tab: 'search',
       concept: 'ACID Transaction & Double-Booking Collision Prevention',
-      desc: 'Walk through passenger form validation, top-down fuselage seat selection (Business 2-2 vs Economy 3-3), and simulated payment generating unique 6-character PNR.',
+      desc: 'Top-down aircraft fuselage seat selection (Business 2-2 vs Economy 3-3) with real-time seat lock ensuring no duplicate seat can be booked simultaneously.',
     },
     {
       num: 4,
-      title: 'PNR Status & Printable E-Ticket / Boarding Pass',
+      title: 'PNR Status & Printable Boarding Pass',
       tab: 'pnr-status',
       concept: 'Single-Row Parameterised Query & Ticket Rendering',
-      desc: 'Search PNR (e.g., SK789A) to view passenger manifest, seat allocations, live delay status, and the official printable boarding pass with barcode.',
+      desc: 'Look up any 6-character PNR (e.g., SK789A) to view passenger manifest, seat allocations, live delay status, and the official printable boarding pass.',
     },
     {
       num: 5,
       title: 'Manage Bookings & Dynamic Tiered Refund Calculation',
       tab: 'manage-booking',
       concept: 'Business Logic for Ticket Cancellation (>24h=100%, <24h=50%)',
-      desc: 'Login as user@demo.com, view past and upcoming bookings, and execute a cancellation that updates booking_status to Cancelled and frees allocated seats.',
+      desc: 'View passenger bookings, compute cancellation fee policies, and execute transactional status changes that release seats back into the available pool.',
     },
     {
       num: 6,
-      title: 'Airport Departures/Arrivals Live Board',
+      title: 'Airport Departures/Arrivals Live Board (FIDS)',
       tab: 'airport-board',
       concept: 'Real-time Airport FIDS Display & Multi-Condition Filtering',
-      desc: 'Select JFK, LGA, or EWR and toggle between departures and arrivals with status badges and delay duration alerts.',
+      desc: 'Flight Information Display System for JFK, LGA, and EWR with live status badges and delay duration alerts.',
     },
     {
       num: 7,
-      title: 'Operations Dashboard & KPI Analytics (Recharts)',
-      tab: 'admin-dashboard',
-      concept: 'Aggregations (SUM, AVG, COUNT, GROUP BY)',
-      desc: 'View KPI tiles (total flights, % delayed, % cancelled, revenue) and interactive charts for delay reasons, busiest hubs, and revenue trends.',
+      title: 'Interactive Flight Operations & Search Dashboard',
+      tab: 'operations',
+      concept: 'Indexed Server-Side Search, Quick Filter Matrix & Modal Profile',
+      desc: 'Global debounced search, autocomplete airport lookups, Status Badge Matrix count tiles (All/On-Time/Delayed/Cancelled), and full modal profile with RouteArc.',
     },
     {
       num: 8,
-      title: 'Aircraft Fleet & Maintenance Due Alert (>180 Days)',
-      tab: 'admin-aircraft',
-      concept: 'DATEDIFF Date Arithmetic & Overlap Prevention',
-      desc: 'Inspect aircraft fleet, highlight tail numbers with maintenance > 180 days in red, click "Mark Serviced Today", and test flight assignment conflict prevention.',
+      title: 'Transactional Status Control & ACID Delay Logging',
+      tab: 'operations',
+      concept: 'Single Unit-of-Work: UPDATE flights + INSERT delay_ledger + INSERT activity_log',
+      desc: 'Change flight status from On-Time to Delayed with mandatory reason code from ENUM and duration in minutes, all logged in a single database transaction.',
     },
     {
       num: 9,
-      title: 'Crew Scheduling, Conflict Checker & Standby Suggestion',
-      tab: 'admin-crew-roster',
-      concept: 'Concurrency, Overlap Checking & 2-Hour Mandatory Rest Rule',
-      desc: 'Open Crew Roster. The conflict checker enforces: (a) zero overlap, and (b) minimum 2 hours rest. Test the "Suggest Standby Crew" intelligent helper.',
+      title: 'Live Delay Ledger & Incident Root-Cause Analytics',
+      tab: 'admin-delays',
+      concept: 'Strict 4-Reason ENUM Governance & Recharts Visualization',
+      desc: 'Filters incidents strictly by the 4 valid ENUM codes (Weather, Mechanical, Air Traffic, Crew Shortage), showcasing total airspace lost minutes and most impacted hub.',
     },
     {
       num: 10,
-      title: 'DBMS SQL Showcase & 9-Entity Relational ER Diagram',
+      title: 'Crew Personnel Lookup & Real-Time Availability Engine',
+      tab: 'admin-crew',
+      concept: 'Complex Date-Window Evaluation & Duty Overlap Detection',
+      desc: 'Search crew members by name or ID and evaluate availability against a target flight window. Shows clear badges: "Available" vs "Busy: flight XX123 hh:mm-hh:mm" or "Rest Violation".',
+    },
+    {
+      num: 11,
+      title: 'Flight Roster Assignment Matrix & Standby Suggestions',
+      tab: 'admin-roster',
+      concept: 'FAA Roster Completeness (≥1 Captain, ≥1 F/O, ≥3 Cabin) & 2h Rest Rule',
+      desc: 'Roster completeness checklist for flights, intelligent conflict-free standby suggestions, and conflict checking on crew assignment.',
+    },
+    {
+      num: 12,
+      title: 'Crew Workload & Relative Utilization Viewer',
+      tab: 'admin-crew',
+      concept: 'Aggregate Metrics (Duty Hours, Shifts) & Relative Utilization Bar',
+      desc: 'Calculates accumulated duty flight hours per personnel, renders normalized relative utilization bars against fleet maximum, and supports CSV export.',
+    },
+    {
+      num: 13,
+      title: 'Transaction Safety Lab (ACID Concurrency Controls)',
+      tab: 'admin-concurrency',
+      concept: 'REPEATABLE READ, SELECT ... FOR UPDATE, Row Locks & Promise.all Race',
+      desc: 'Split-screen coordinator simulation where Coordinator Alpha and Beta concurrently attempt to book the same Captain. Demonstrates row locking and atomic rollback.',
+    },
+    {
+      num: 14,
+      title: 'Business Intelligence & Window Functions Hub',
+      tab: 'admin-analytics',
+      concept: 'Advanced Window Functions: DENSE_RANK(), SUM() OVER, AVG() OVER, PERCENT_RANK()',
+      desc: 'Route delay leaderboard, aircraft airworthiness check via DATEDIFF (>180d warning), monthly cumulative delay trend, and 7-day moving averages.',
+    },
+    {
+      num: 15,
+      title: 'DBMS SQL Showcase & 9-Entity Relational Schema',
       tab: 'admin-sql-showcase',
-      concept: '12+ Core SQL Queries (JOIN, Window, HAVING, Subqueries)',
-      desc: 'The master viva centerpiece: 12 pre-loaded queries with live execution times (ms), result tables, and the full interactive SVG ER Diagram of all 9 tables.',
+      concept: 'Complete Academic Schema, Foreign Keys & 12+ Relational Queries',
+      desc: 'Comprehensive DBMS presentation: live query timing in milliseconds, raw SQL inspection, copy-to-clipboard, and interactive ER Diagram.',
     },
   ];
 
@@ -92,15 +141,16 @@ export const VivaDemoGuide: React.FC<VivaDemoGuideProps> = ({ onNavigateTab }) =
           <div className="flex items-center gap-3">
             <Award className="w-6 h-6 text-amber-400" />
             <div>
-              <h2 className="text-lg font-bold">SkyLedger DBMS Viva Demo Script</h2>
+              <h2 className="text-lg font-bold">SkyLedger DBMS Viva Demo Guide (15 Steps)</h2>
               <p className="text-xs text-blue-200">
-                10-Step Interactive Click-Path covering all Database Syllabus Concepts
+                Complete Academic Evaluation Path Covering All Database & Systems Concepts
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={() => setVivaGuideOpen(false)}
-            className="p-1 hover:bg-white/10 rounded text-slate-300 hover:text-white"
+            className="p-1 hover:bg-white/10 rounded text-slate-300 hover:text-white cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -110,7 +160,7 @@ export const VivaDemoGuide: React.FC<VivaDemoGuideProps> = ({ onNavigateTab }) =
         <div className="p-6 overflow-y-auto space-y-4">
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center justify-between">
             <span>
-              <strong>Tip for Viva:</strong> Use the <strong>"Jump to Step"</strong> button on each card to navigate directly to the relevant screen during your evaluation!
+              <strong>Tip for Viva:</strong> Use the <strong>"Jump to Step"</strong> button on each card to navigate directly to the relevant screen during your university evaluation!
             </span>
             <span className="font-mono font-bold bg-amber-200 px-2 py-0.5 rounded text-[11px]">
               Demo Date: 2013-01-01
@@ -128,7 +178,7 @@ export const VivaDemoGuide: React.FC<VivaDemoGuideProps> = ({ onNavigateTab }) =
                     {s.num}
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <div className="text-sm font-bold text-slate-900 flex flex-wrap items-center gap-2">
                       <span>{s.title}</span>
                       <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
                         {s.concept}
@@ -139,11 +189,12 @@ export const VivaDemoGuide: React.FC<VivaDemoGuideProps> = ({ onNavigateTab }) =
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => {
                     onNavigateTab(s.tab);
                     setVivaGuideOpen(false);
                   }}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#F57C00] hover:bg-orange-600 text-white rounded text-xs font-bold shadow transition-colors"
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#F57C00] hover:bg-orange-600 text-white rounded text-xs font-bold shadow transition-colors cursor-pointer"
                 >
                   <span>Jump to Step</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -157,8 +208,9 @@ export const VivaDemoGuide: React.FC<VivaDemoGuideProps> = ({ onNavigateTab }) =
         <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
           <span>Demo Credentials: admin@demo.com / admin123 | user@demo.com / user123</span>
           <button
+            type="button"
             onClick={() => setVivaGuideOpen(false)}
-            className="px-4 py-1.5 bg-slate-800 text-white font-semibold rounded hover:bg-slate-700"
+            className="px-4 py-1.5 bg-slate-800 text-white font-semibold rounded hover:bg-slate-700 cursor-pointer"
           >
             Close Guide
           </button>

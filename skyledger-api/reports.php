@@ -126,8 +126,8 @@ $reports = [
     ],
     'route_leaderboard' => [
         'title'       => 'Route Delay Leaderboard & Ranking',
-        'concept'     => 'Window Function: DENSE_RANK() OVER (ORDER BY Avg Delay DESC)',
-        'description' => 'Ranks all origin-destination routes by average delay severity with on-time and delay percentages.',
+        'concept'     => 'Window Function: RANK() OVER (ORDER BY delayed_count DESC)',
+        'description' => 'Ranks origin-destination routes having at least 20 flights by total delayed count with delay rate percentage.',
         'sql'         => "
             SELECT 
                 CONCAT(f.origin_airport_id, ' -> ', f.destination_airport_id) AS route,
@@ -135,41 +135,34 @@ $reports = [
                 f.destination_airport_id,
                 dest.city AS destination_city,
                 COUNT(f.flight_id) AS total_flights,
-                SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) AS delayed_flights,
-                ROUND((SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) * 100.0) / COUNT(f.flight_id), 1) AS delay_percentage,
+                SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) AS delayed_count,
+                ROUND((SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) * 100.0) / COUNT(f.flight_id), 1) AS delay_rate,
                 COALESCE(ROUND(AVG(dl.delay_duration_minutes), 1), 0.0) AS avg_delay_minutes,
-                DENSE_RANK() OVER (ORDER BY COALESCE(AVG(dl.delay_duration_minutes), 0) DESC) AS delay_rank
+                RANK() OVER (ORDER BY SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) DESC) AS delay_rank
             FROM flights f
             JOIN airports dest ON f.destination_airport_id = dest.airport_id
             LEFT JOIN delay_ledger dl ON f.flight_id = dl.flight_id
             GROUP BY f.origin_airport_id, f.destination_airport_id, dest.city
-            ORDER BY delay_rank ASC
-            LIMIT 50;
+            HAVING total_flights >= 20
+            ORDER BY delay_rank ASC;
         "
     ],
     'aircraft_utilization' => [
-        'title'       => 'Fleet Aircraft Utilization & Airworthiness',
-        'concept'     => 'Conditional Aggregates & DATEDIFF Airworthiness Status',
-        'description' => 'Evaluates flight hours and flags maintenance overdue (>180 days) or approaching (>120 days).',
+        'title'       => 'Fleet Aircraft Utilization & Maintenance by Model',
+        'concept'     => 'Grouped Model Aggregates with DATEDIFF Airworthiness Check',
+        'description' => 'Aggregates fleet aircraft by model, counting total flights, average flights per aircraft, average days since maintenance, and overdue aircraft (>180 days).',
         'sql'         => "
             SELECT 
-                a.tail_number,
                 a.model,
-                a.capacity,
-                a.last_maintenance_date,
-                DATEDIFF('2013-12-31', a.last_maintenance_date) AS days_since_maintenance,
+                COUNT(DISTINCT a.tail_number) AS aircraft_count,
                 COUNT(f.flight_id) AS total_flights,
-                COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, f.scheduled_departure, f.scheduled_arrival) / 60.0), 1), 0.0) AS total_flight_hours,
-                CASE 
-                    WHEN DATEDIFF('2013-12-31', a.last_maintenance_date) > 180 THEN 'Overdue'
-                    WHEN DATEDIFF('2013-12-31', a.last_maintenance_date) > 120 THEN 'Upcoming'
-                    ELSE 'Airworthy'
-                END AS maintenance_status
+                ROUND(COUNT(f.flight_id) / COUNT(DISTINCT a.tail_number), 1) AS avg_flights_per_aircraft,
+                ROUND(AVG(DATEDIFF('2013-12-31', a.last_maintenance_date)), 1) AS avg_days_since_maintenance,
+                SUM(CASE WHEN DATEDIFF('2013-12-31', a.last_maintenance_date) > 180 THEN 1 ELSE 0 END) AS count_overdue
             FROM aircraft a
             LEFT JOIN flights f ON a.tail_number = f.assigned_aircraft_id
-            GROUP BY a.tail_number, a.model, a.capacity, a.last_maintenance_date
-            ORDER BY total_flight_hours DESC
-            LIMIT 100;
+            GROUP BY a.model
+            ORDER BY total_flights DESC;
         "
     ],
     'window_monthly' => [
@@ -241,10 +234,57 @@ $reports = [
             ORDER BY origin_airport_id, month_num ASC;
         "
     ],
+    'window_airport_delay' => [
+        'title'       => 'Airport Cumulative Delay Minutes by Month',
+        'concept'     => 'Window Function: SUM() OVER (PARTITION BY origin_airport_id ORDER BY month)',
+        'description' => 'Calculates cumulative delay minutes progression partitioned per origin airport hub.',
+        'sql'         => "
+            WITH AirportMonthlyDelay AS (
+                SELECT 
+                    f.origin_airport_id,
+                    MONTH(f.scheduled_departure) AS month_num,
+                    DATE_FORMAT(f.scheduled_departure, '%M') AS month_name,
+                    COALESCE(SUM(dl.delay_duration_minutes), 0) AS monthly_delay_minutes
+                FROM flights f
+                JOIN delay_ledger dl ON f.flight_id = dl.flight_id
+                GROUP BY f.origin_airport_id, MONTH(f.scheduled_departure), DATE_FORMAT(f.scheduled_departure, '%M')
+            )
+            SELECT 
+                origin_airport_id,
+                month_num,
+                month_name,
+                monthly_delay_minutes,
+                SUM(monthly_delay_minutes) OVER (PARTITION BY origin_airport_id ORDER BY month_num) AS cumulative_delay_minutes
+            FROM AirportMonthlyDelay
+            ORDER BY origin_airport_id, month_num ASC;
+        "
+    ],
+    'window_trailing_daily_delay' => [
+        'title'       => 'Trailing 7-Day Cumulative Delay Window',
+        'concept'     => 'Window Function: SUM() OVER (ORDER BY flight_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)',
+        'description' => 'Calculates a rolling 7-day cumulative total of airspace delay minutes across January 2013.',
+        'sql'         => "
+            WITH DailyDelays AS (
+                SELECT 
+                    DATE(f.scheduled_departure) AS flight_date,
+                    COALESCE(SUM(dl.delay_duration_minutes), 0) AS daily_delay_minutes
+                FROM flights f
+                JOIN delay_ledger dl ON f.flight_id = dl.flight_id
+                WHERE f.scheduled_departure >= '2013-01-01' AND f.scheduled_departure <= '2013-01-31'
+                GROUP BY DATE(f.scheduled_departure)
+            )
+            SELECT 
+                flight_date,
+                daily_delay_minutes,
+                SUM(daily_delay_minutes) OVER (ORDER BY flight_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS trailing_7day_delay_minutes
+            FROM DailyDelays
+            ORDER BY flight_date ASC;
+        "
+    ],
     'window_crew' => [
-        'title'       => 'Crew Percentile Rank by Total Duty Hours',
-        'concept'     => 'Window Function: PERCENT_RANK() OVER (ORDER BY Duty Hours DESC)',
-        'description' => 'Computes the relative percentile rank for each crew member based on accumulated duty hours.',
+        'title'       => 'Crew Percentile Rank Partitioned by Role',
+        'concept'     => 'Window Function: PERCENT_RANK() OVER (PARTITION BY role ORDER BY Duty Hours DESC)',
+        'description' => 'Computes the relative percentile rank for each crew member within their specific operational role.',
         'sql'         => "
             WITH CrewHours AS (
                 SELECT 
@@ -263,10 +303,9 @@ $reports = [
                 role,
                 base_airport_id,
                 total_duty_hours,
-                ROUND(PERCENT_RANK() OVER (ORDER BY total_duty_hours DESC) * 100, 1) AS duty_percentile_rank
+                ROUND(PERCENT_RANK() OVER (PARTITION BY role ORDER BY total_duty_hours DESC) * 100, 1) AS duty_percentile_rank
             FROM CrewHours
-            ORDER BY total_duty_hours DESC
-            LIMIT 50;
+            ORDER BY role ASC, total_duty_hours DESC;
         "
     ]
 ];

@@ -167,6 +167,79 @@ const VIVA_QUERIES: VivaQuery[] = [
       { flight_number: 'AA-843', seat_no: '12A', pnr: 'SK789A', booking_status: 'Confirmed' },
     ],
   },
+  {
+    id: 13,
+    title: 'Route Delay Ranking & Incident Volume Filtering',
+    concept: 'Window Function: RANK() OVER (ORDER BY delayed_count DESC)',
+    description: 'Ranks origin-destination flight corridors with at least 20 departures by total delay frequency and failure rate.',
+    sql: `SELECT CONCAT(f.origin_airport_id, ' -> ', f.destination_airport_id) AS route, COUNT(f.flight_id) AS total_flights, SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) AS delayed_count, ROUND((SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) * 100.0) / COUNT(f.flight_id), 1) AS delay_rate, COALESCE(ROUND(AVG(dl.delay_duration_minutes), 1), 0.0) AS avg_delay_minutes, RANK() OVER (ORDER BY SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) DESC) AS delay_rank FROM flights f JOIN airports dest ON f.destination_airport_id = dest.airport_id LEFT JOIN delay_ledger dl ON f.flight_id = dl.flight_id GROUP BY f.origin_airport_id, f.destination_airport_id, dest.city HAVING total_flights >= 20 ORDER BY delay_rank ASC;`,
+    sampleResult: [
+      { route: 'JFK -> LAX', total_flights: 45, delayed_count: 14, delay_rate: 31.1, avg_delay_minutes: 42.5, delay_rank: 1 },
+      { route: 'EWR -> ORD', total_flights: 38, delayed_count: 11, delay_rate: 28.9, avg_delay_minutes: 36.8, delay_rank: 2 },
+      { route: 'LGA -> ATL', total_flights: 32, delayed_count: 9, delay_rate: 28.1, avg_delay_minutes: 29.4, delay_rank: 3 },
+    ],
+  },
+  {
+    id: 14,
+    title: 'Fleet Utilization & Airworthiness Grouped by Model',
+    concept: 'Grouped Model Aggregates with DATEDIFF Overdue Count',
+    description: 'Aggregates fleet aircraft by model, calculating total flight volume, average aircraft utilization, and overdue service count (>180 days).',
+    sql: `SELECT a.model, COUNT(DISTINCT a.tail_number) AS aircraft_count, COUNT(f.flight_id) AS total_flights, ROUND(COUNT(f.flight_id) / COUNT(DISTINCT a.tail_number), 1) AS avg_flights_per_aircraft, ROUND(AVG(DATEDIFF('2013-12-31', a.last_maintenance_date)), 1) AS avg_days_since_maintenance, SUM(CASE WHEN DATEDIFF('2013-12-31', a.last_maintenance_date) > 180 THEN 1 ELSE 0 END) AS count_overdue FROM aircraft a LEFT JOIN flights f ON a.tail_number = f.assigned_aircraft_id GROUP BY a.model ORDER BY total_flights DESC;`,
+    sampleResult: [
+      { model: 'Boeing 737-800', aircraft_count: 5, total_flights: 38, avg_flights_per_aircraft: 7.6, avg_days_since_maintenance: 112.4, count_overdue: 1 },
+      { model: 'Airbus A320-200', aircraft_count: 4, total_flights: 31, avg_flights_per_aircraft: 7.8, avg_days_since_maintenance: 98.2, count_overdue: 0 },
+      { model: 'Boeing 777-200ER', aircraft_count: 2, total_flights: 14, avg_flights_per_aircraft: 7.0, avg_days_since_maintenance: 145.0, count_overdue: 0 },
+    ],
+  },
+  {
+    id: 15,
+    title: 'Cumulative Delay Minutes Partitioned by Airport Hub',
+    concept: 'Window Function: SUM() OVER (PARTITION BY origin_airport_id ORDER BY month)',
+    description: 'Calculates progressive monthly cumulative delay totals partitioned independently across each origin hub.',
+    sql: `WITH AirportMonthlyDelay AS (SELECT f.origin_airport_id, MONTH(f.scheduled_departure) AS month_num, DATE_FORMAT(f.scheduled_departure, '%M') AS month_name, COALESCE(SUM(dl.delay_duration_minutes), 0) AS monthly_delay_minutes FROM flights f JOIN delay_ledger dl ON f.flight_id = dl.flight_id GROUP BY f.origin_airport_id, MONTH(f.scheduled_departure), DATE_FORMAT(f.scheduled_departure, '%M')) SELECT origin_airport_id, month_num, month_name, monthly_delay_minutes, SUM(monthly_delay_minutes) OVER (PARTITION BY origin_airport_id ORDER BY month_num) AS cumulative_delay_minutes FROM AirportMonthlyDelay ORDER BY origin_airport_id, month_num ASC;`,
+    sampleResult: [
+      { origin_airport_id: 'JFK', month_num: 1, month_name: 'January', monthly_delay_minutes: 420, cumulative_delay_minutes: 420 },
+      { origin_airport_id: 'JFK', month_num: 2, month_name: 'February', monthly_delay_minutes: 380, cumulative_delay_minutes: 800 },
+      { origin_airport_id: 'LGA', month_num: 1, month_name: 'January', monthly_delay_minutes: 310, cumulative_delay_minutes: 310 },
+      { origin_airport_id: 'EWR', month_num: 1, month_name: 'January', monthly_delay_minutes: 540, cumulative_delay_minutes: 540 },
+    ],
+  },
+  {
+    id: 16,
+    title: 'Trailing 7-Day Rolling Airspace Delay Window',
+    concept: 'Window Frame: ROWS BETWEEN 6 PRECEDING AND CURRENT ROW',
+    description: 'Calculates a continuous rolling 7-day cumulative total of airspace delay minutes across consecutive calendar days.',
+    sql: `WITH DailyDelays AS (SELECT DATE(f.scheduled_departure) AS flight_date, COALESCE(SUM(dl.delay_duration_minutes), 0) AS daily_delay_minutes FROM flights f JOIN delay_ledger dl ON f.flight_id = dl.flight_id WHERE f.scheduled_departure >= '2013-01-01' AND f.scheduled_departure <= '2013-01-31' GROUP BY DATE(f.scheduled_departure)) SELECT flight_date, daily_delay_minutes, SUM(daily_delay_minutes) OVER (ORDER BY flight_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS trailing_7day_delay_minutes FROM DailyDelays ORDER BY flight_date ASC;`,
+    sampleResult: [
+      { flight_date: '2013-01-01', daily_delay_minutes: 180, trailing_7day_delay_minutes: 180 },
+      { flight_date: '2013-01-02', daily_delay_minutes: 95, trailing_7day_delay_minutes: 275 },
+      { flight_date: '2013-01-07', daily_delay_minutes: 110, trailing_7day_delay_minutes: 840 },
+    ],
+  },
+  {
+    id: 17,
+    title: 'Crew Relative Percentile Rank Partitioned by Role',
+    concept: 'Window Function: PERCENT_RANK() OVER (PARTITION BY role)',
+    description: 'Computes normalized percentile ranking (0.0 to 100.0) of accumulated flight duty hours partitioned by role.',
+    sql: `WITH CrewHours AS (SELECT cm.crew_id, cm.full_name, cm.role, cm.base_airport_id, COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, ca.duty_start_time, ca.duty_end_time) / 60.0), 1), 0.0) AS total_duty_hours FROM crew_members cm LEFT JOIN crew_assignments ca ON cm.crew_id = ca.crew_id GROUP BY cm.crew_id, cm.full_name, cm.role, cm.base_airport_id) SELECT crew_id, full_name, role, base_airport_id, total_duty_hours, ROUND(PERCENT_RANK() OVER (PARTITION BY role ORDER BY total_duty_hours DESC) * 100, 1) AS duty_percentile_rank FROM CrewHours ORDER BY role, duty_percentile_rank ASC;`,
+    sampleResult: [
+      { crew_id: 1, full_name: 'Capt. Rajesh Varma', role: 'Captain', base_airport_id: 'JFK', total_duty_hours: 6.8, duty_percentile_rank: 0.0 },
+      { crew_id: 2, full_name: 'Capt. Sarah Jenkins', role: 'Captain', base_airport_id: 'JFK', total_duty_hours: 5.5, duty_percentile_rank: 25.0 },
+      { crew_id: 3, full_name: 'F/O Amit Kulkarni', role: 'First Officer', base_airport_id: 'JFK', total_duty_hours: 6.8, duty_percentile_rank: 0.0 },
+    ],
+  },
+  {
+    id: 18,
+    title: 'Crew Workload & Fleet Utilization Aggregation',
+    concept: 'Workload Metrics & Max Normalization Query',
+    description: 'Aggregates crew assignment shifts, total duty flight hours, and computes relative utilization metrics.',
+    sql: `SELECT cm.crew_id, cm.full_name, cm.role, cm.base_airport_id, COUNT(ca.assignment_id) AS total_flights, COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, ca.duty_start_time, ca.duty_end_time) / 60.0), 1), 0.0) AS total_duty_hours, MAX(ca.duty_end_time) AS last_duty_time FROM crew_members cm LEFT JOIN crew_assignments ca ON cm.crew_id = ca.crew_id GROUP BY cm.crew_id, cm.full_name, cm.role, cm.base_airport_id ORDER BY total_duty_hours DESC;`,
+    sampleResult: [
+      { crew_id: 1, full_name: 'Capt. Rajesh Varma', role: 'Captain', total_flights: 1, total_duty_hours: 6.8, last_duty_time: '2013-01-01 13:00:00' },
+      { crew_id: 3, full_name: 'F/O Amit Kulkarni', role: 'First Officer', total_flights: 1, total_duty_hours: 6.8, last_duty_time: '2013-01-01 13:00:00' },
+      { crew_id: 7, full_name: 'Priya Sharma', role: 'Cabin Crew', total_flights: 1, total_duty_hours: 6.8, last_duty_time: '2013-01-01 13:00:00' },
+    ],
+  },
 ];
 
 export const SqlShowcase: React.FC = () => {
@@ -188,7 +261,7 @@ export const SqlShowcase: React.FC = () => {
         <div>
           <h2 className="text-base font-bold text-[#0B2E5C]">DBMS Syllabus SQL Showcase & ER Architecture</h2>
           <p className="text-xs text-slate-500">
-            Interactive presentation tool for academic evaluation. Covers 12+ SQL relational concepts & complete schema.
+            Interactive presentation tool for academic evaluation. Covers 18 SQL relational concepts & complete schema.
           </p>
         </div>
 
@@ -203,7 +276,7 @@ export const SqlShowcase: React.FC = () => {
             }`}
           >
             <Code2 className="w-3.5 h-3.5" />
-            <span>12+ SQL Queries</span>
+            <span>18 SQL Queries</span>
           </button>
           <button
             onClick={() => setActiveTab('er-diagram')}
@@ -226,7 +299,7 @@ export const SqlShowcase: React.FC = () => {
           <div className="lg:col-span-4 bg-white border border-slate-300 rounded-xl overflow-hidden shadow-sm text-xs">
             <div className="bg-[#0B2E5C] text-white p-3 font-bold uppercase tracking-wider text-[11px] flex items-center justify-between">
               <span>Syllabus SQL Queries</span>
-              <span>12 Queries</span>
+              <span>18 Queries</span>
             </div>
 
             <div className="divide-y divide-slate-100 max-h-[640px] overflow-y-auto">

@@ -10,6 +10,7 @@ import {
   Airport,
   Aircraft,
   CrewMember,
+  CrewRole,
   Flight,
   FlightStatus,
   CrewAssignment,
@@ -1518,16 +1519,16 @@ export const apiClient = {
       {
         key: 'route_leaderboard',
         title: 'Route Delay Leaderboard & Ranking',
-        concept: 'Window Function: DENSE_RANK() OVER (ORDER BY Avg Delay DESC)',
-        description: 'Ranks all origin-destination routes by average delay severity with on-time and delay percentages.',
-        sql: `SELECT CONCAT(f.origin_airport_id, ' -> ', f.destination_airport_id) AS route, f.origin_airport_id, f.destination_airport_id, dest.city AS destination_city, COUNT(f.flight_id) AS total_flights, SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) AS delayed_flights, ROUND((SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) * 100.0) / COUNT(f.flight_id), 1) AS delay_percentage, COALESCE(ROUND(AVG(dl.delay_duration_minutes), 1), 0.0) AS avg_delay_minutes, DENSE_RANK() OVER (ORDER BY COALESCE(AVG(dl.delay_duration_minutes), 0) DESC) AS delay_rank FROM flights f JOIN airports dest ON f.destination_airport_id = dest.airport_id LEFT JOIN delay_ledger dl ON f.flight_id = dl.flight_id GROUP BY f.origin_airport_id, f.destination_airport_id, dest.city ORDER BY delay_rank ASC LIMIT 50;`,
+        concept: 'Window Function: RANK() OVER (ORDER BY delayed_count DESC)',
+        description: 'Ranks origin-destination routes having at least 20 flights by total delayed count with delay rate percentage.',
+        sql: `SELECT CONCAT(f.origin_airport_id, ' -> ', f.destination_airport_id) AS route, f.origin_airport_id, f.destination_airport_id, dest.city AS destination_city, COUNT(f.flight_id) AS total_flights, SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) AS delayed_count, ROUND((SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) * 100.0) / COUNT(f.flight_id), 1) AS delay_rate, COALESCE(ROUND(AVG(dl.delay_duration_minutes), 1), 0.0) AS avg_delay_minutes, RANK() OVER (ORDER BY SUM(CASE WHEN f.status = 'Delayed' THEN 1 ELSE 0 END) DESC) AS delay_rank FROM flights f JOIN airports dest ON f.destination_airport_id = dest.airport_id LEFT JOIN delay_ledger dl ON f.flight_id = dl.flight_id GROUP BY f.origin_airport_id, f.destination_airport_id, dest.city HAVING total_flights >= 20 ORDER BY delay_rank ASC;`,
       },
       {
         key: 'aircraft_utilization',
-        title: 'Fleet Aircraft Utilization & Airworthiness',
-        concept: 'Conditional Aggregates & DATEDIFF Airworthiness Status',
-        description: 'Evaluates flight hours and flags maintenance overdue (>180 days) or approaching (>120 days).',
-        sql: `SELECT a.tail_number, a.model, a.capacity, a.last_maintenance_date, DATEDIFF('2013-12-31', a.last_maintenance_date) AS days_since_maintenance, COUNT(f.flight_id) AS total_flights, COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, f.scheduled_departure, f.scheduled_arrival) / 60.0), 1), 0.0) AS total_flight_hours, CASE WHEN DATEDIFF('2013-12-31', a.last_maintenance_date) > 180 THEN 'Overdue' WHEN DATEDIFF('2013-12-31', a.last_maintenance_date) > 120 THEN 'Upcoming' ELSE 'Airworthy' END AS maintenance_status FROM aircraft a LEFT JOIN flights f ON a.tail_number = f.assigned_aircraft_id GROUP BY a.tail_number, a.model, a.capacity, a.last_maintenance_date ORDER BY total_flight_hours DESC LIMIT 100;`,
+        title: 'Fleet Aircraft Utilization & Maintenance by Model',
+        concept: 'Grouped Model Aggregates with DATEDIFF Airworthiness Check',
+        description: 'Aggregates fleet aircraft by model, counting total flights, average flights per aircraft, average days since maintenance, and overdue aircraft (>180 days).',
+        sql: `SELECT a.model, COUNT(DISTINCT a.tail_number) AS aircraft_count, COUNT(f.flight_id) AS total_flights, ROUND(COUNT(f.flight_id) / COUNT(DISTINCT a.tail_number), 1) AS avg_flights_per_aircraft, ROUND(AVG(DATEDIFF('2013-12-31', a.last_maintenance_date)), 1) AS avg_days_since_maintenance, SUM(CASE WHEN DATEDIFF('2013-12-31', a.last_maintenance_date) > 180 THEN 1 ELSE 0 END) AS count_overdue FROM aircraft a LEFT JOIN flights f ON a.tail_number = f.assigned_aircraft_id GROUP BY a.model ORDER BY total_flights DESC;`,
       },
       {
         key: 'window_monthly',
@@ -1551,11 +1552,25 @@ export const apiClient = {
         sql: `WITH HubMonthly AS (SELECT origin_airport_id, MONTH(scheduled_departure) AS month_num, COUNT(flight_id) AS departures FROM flights GROUP BY origin_airport_id, MONTH(scheduled_departure)) SELECT origin_airport_id, month_num, departures, SUM(departures) OVER (PARTITION BY origin_airport_id ORDER BY month_num) AS hub_running_total FROM HubMonthly ORDER BY origin_airport_id, month_num ASC;`,
       },
       {
+        key: 'window_airport_delay',
+        title: 'Airport Cumulative Delay Minutes by Month',
+        concept: 'Window Function: SUM() OVER (PARTITION BY origin_airport_id ORDER BY month)',
+        description: 'Calculates cumulative delay minutes progression partitioned per origin airport hub.',
+        sql: `WITH AirportMonthlyDelay AS (SELECT f.origin_airport_id, MONTH(f.scheduled_departure) AS month_num, DATE_FORMAT(f.scheduled_departure, '%M') AS month_name, COALESCE(SUM(dl.delay_duration_minutes), 0) AS monthly_delay_minutes FROM flights f JOIN delay_ledger dl ON f.flight_id = dl.flight_id GROUP BY f.origin_airport_id, MONTH(f.scheduled_departure), DATE_FORMAT(f.scheduled_departure, '%M')) SELECT origin_airport_id, month_num, month_name, monthly_delay_minutes, SUM(monthly_delay_minutes) OVER (PARTITION BY origin_airport_id ORDER BY month_num) AS cumulative_delay_minutes FROM AirportMonthlyDelay ORDER BY origin_airport_id, month_num ASC;`,
+      },
+      {
+        key: 'window_trailing_daily_delay',
+        title: 'Trailing 7-Day Cumulative Delay Window',
+        concept: 'Window Function: SUM() OVER (ORDER BY flight_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)',
+        description: 'Calculates a rolling 7-day cumulative total of airspace delay minutes across January 2013.',
+        sql: `WITH DailyDelays AS (SELECT DATE(f.scheduled_departure) AS flight_date, COALESCE(SUM(dl.delay_duration_minutes), 0) AS daily_delay_minutes FROM flights f JOIN delay_ledger dl ON f.flight_id = dl.flight_id WHERE f.scheduled_departure >= '2013-01-01' AND f.scheduled_departure <= '2013-01-31' GROUP BY DATE(f.scheduled_departure)) SELECT flight_date, daily_delay_minutes, SUM(daily_delay_minutes) OVER (ORDER BY flight_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS trailing_7day_delay_minutes FROM DailyDelays ORDER BY flight_date ASC;`,
+      },
+      {
         key: 'window_crew',
-        title: 'Crew Percentile Rank by Total Duty Hours',
-        concept: 'Window Function: PERCENT_RANK() OVER (ORDER BY Duty Hours DESC)',
-        description: 'Computes the relative percentile rank for each crew member based on accumulated duty hours.',
-        sql: `WITH CrewHours AS (SELECT cm.crew_id, cm.full_name, cm.role, cm.base_airport_id, COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, ca.duty_start_time, ca.duty_end_time) / 60.0), 1), 0.0) AS total_duty_hours FROM crew_members cm LEFT JOIN crew_assignments ca ON cm.crew_id = ca.crew_id GROUP BY cm.crew_id, cm.full_name, cm.role, cm.base_airport_id) SELECT crew_id, full_name, role, base_airport_id, total_duty_hours, ROUND(PERCENT_RANK() OVER (ORDER BY total_duty_hours DESC) * 100, 1) AS duty_percentile_rank FROM CrewHours ORDER BY total_duty_hours DESC LIMIT 50;`,
+        title: 'Crew Percentile Rank Partitioned by Role',
+        concept: 'Window Function: PERCENT_RANK() OVER (PARTITION BY role ORDER BY Duty Hours DESC)',
+        description: 'Computes the relative percentile rank for each crew member within their specific operational role.',
+        sql: `WITH CrewHours AS (SELECT cm.crew_id, cm.full_name, cm.role, cm.base_airport_id, COALESCE(ROUND(SUM(TIMESTAMPDIFF(MINUTE, ca.duty_start_time, ca.duty_end_time) / 60.0), 1), 0.0) AS total_duty_hours FROM crew_members cm LEFT JOIN crew_assignments ca ON cm.crew_id = ca.crew_id GROUP BY cm.crew_id, cm.full_name, cm.role, cm.base_airport_id) SELECT crew_id, full_name, role, base_airport_id, total_duty_hours, ROUND(PERCENT_RANK() OVER (PARTITION BY role ORDER BY total_duty_hours DESC) * 100, 1) AS duty_percentile_rank FROM CrewHours ORDER BY role, duty_percentile_rank ASC;`,
       },
     ];
   },
@@ -1768,68 +1783,90 @@ export const apiClient = {
               destination_airport_id: f.destination_airport_id,
               destination_city: getAirport(f.destination_airport_id).city,
               total_flights: 0,
-              delayed_flights: 0,
+              delayed_count: 0,
               total_delay_mins: 0,
             });
           }
           const item = routeMap.get(k);
           item.total_flights += 1;
           if (f.status === 'Delayed') {
-            item.delayed_flights += 1;
+            item.delayed_count += 1;
             const delay = mockDelays.find((d) => d.flight_id === f.flight_id);
             if (delay) item.total_delay_mins += delay.delay_duration_minutes;
           }
         });
 
-        const list = Array.from(routeMap.values()).map((v) => ({
-          ...v,
-          delay_percentage: v.total_flights > 0 ? Math.round((v.delayed_flights / v.total_flights) * 1000) / 10 : 0,
-          avg_delay_minutes: v.delayed_flights > 0 ? Math.round((v.total_delay_mins / v.delayed_flights) * 10) / 10 : 0,
-        }));
+        // HAVING total_flights >= 20
+        const filtered = Array.from(routeMap.values())
+          .filter((v) => v.total_flights >= 20)
+          .map((v) => ({
+            ...v,
+            delayed_flights: v.delayed_count,
+            delay_rate: Math.round((v.delayed_count / v.total_flights) * 1000) / 10,
+            delay_percentage: Math.round((v.delayed_count / v.total_flights) * 1000) / 10,
+            avg_delay_minutes: v.delayed_count > 0 ? Math.round((v.total_delay_mins / v.delayed_count) * 10) / 10 : 0,
+          }));
 
-        list.sort((a, b) => b.avg_delay_minutes - a.avg_delay_minutes);
+        // RANK() OVER (ORDER BY delayed_count DESC)
+        filtered.sort((a, b) => b.delayed_count - a.delayed_count);
         let currRank = 1;
-        data = list.map((item, idx) => {
-          if (idx > 0 && item.avg_delay_minutes < list[idx - 1].avg_delay_minutes) {
-            currRank++;
+        data = filtered.map((item, idx) => {
+          if (idx > 0 && item.delayed_count < filtered[idx - 1].delayed_count) {
+            currRank = idx + 1; // standard SQL RANK() skips ties
           }
           return { ...item, delay_rank: currRank };
-        }).slice(0, 50);
+        });
         break;
       }
 
       case 'aircraft_utilization': {
-        data = mockAircraft.map((a) => {
-          const assignedFlights = mockFlights.filter((f) => f.assigned_aircraft_id === a.tail_number);
-          let totalMinutes = 0;
-          assignedFlights.forEach((f) => {
-            const dep = new Date(f.scheduled_departure).getTime();
-            const arr = new Date(f.scheduled_arrival).getTime();
-            if (!isNaN(dep) && !isNaN(arr) && arr > dep) {
-              totalMinutes += (arr - dep) / 60000;
-            }
-          });
+        const modelMap = new Map<string, {
+          model: string;
+          aircraft_count: number;
+          total_flights: number;
+          total_days_maint: number;
+          count_overdue: number;
+        }>();
 
+        mockAircraft.forEach((a) => {
+          if (!modelMap.has(a.model)) {
+            modelMap.set(a.model, {
+              model: a.model,
+              aircraft_count: 0,
+              total_flights: 0,
+              total_days_maint: 0,
+              count_overdue: 0,
+            });
+          }
+          const item = modelMap.get(a.model)!;
+          item.aircraft_count += 1;
           const daysSince = a.last_maintenance_date
             ? Math.floor((new Date('2013-12-31').getTime() - new Date(a.last_maintenance_date).getTime()) / 86400000)
             : 200;
-
-          const maintStatus: 'Airworthy' | 'Upcoming' | 'Overdue' =
-            daysSince > 180 ? 'Overdue' : daysSince > 120 ? 'Upcoming' : 'Airworthy';
-
-          return {
-            tail_number: a.tail_number,
-            model: a.model,
-            capacity: a.capacity,
-            last_maintenance_date: a.last_maintenance_date,
-            days_since_maintenance: daysSince,
-            total_flights: assignedFlights.length,
-            total_flight_hours: Math.round((totalMinutes / 60) * 10) / 10,
-            maintenance_status: maintStatus,
-          };
+          item.total_days_maint += daysSince;
+          if (daysSince > 180) {
+            item.count_overdue += 1;
+          }
         });
-        data.sort((a, b) => b.total_flight_hours - a.total_flight_hours);
-        data = data.slice(0, 100);
+
+        mockFlights.forEach((f) => {
+          if (f.assigned_aircraft_id) {
+            const ac = mockAircraft.find((a) => a.tail_number === f.assigned_aircraft_id);
+            if (ac && modelMap.has(ac.model)) {
+              modelMap.get(ac.model)!.total_flights += 1;
+            }
+          }
+        });
+
+        data = Array.from(modelMap.values()).map((m) => ({
+          model: m.model,
+          aircraft_count: m.aircraft_count,
+          total_flights: m.total_flights,
+          avg_flights_per_aircraft: m.aircraft_count > 0 ? Math.round((m.total_flights / m.aircraft_count) * 10) / 10 : 0,
+          avg_days_since_maintenance: m.aircraft_count > 0 ? Math.round((m.total_days_maint / m.aircraft_count) * 10) / 10 : 0,
+          count_overdue: m.count_overdue,
+        }));
+        data.sort((a, b) => b.total_flights - a.total_flights);
         break;
       }
 
@@ -1924,32 +1961,107 @@ export const apiClient = {
         break;
       }
 
-      case 'window_crew': {
-        const crewHours = mockCrew.map((c) => {
-          const assigns = mockAssignments.filter((ca) => ca.crew_id === c.crew_id);
-          let totalMinutes = 0;
-          assigns.forEach((ca) => {
-            const start = new Date(ca.duty_start_time).getTime();
-            const end = new Date(ca.duty_end_time).getTime();
-            if (!isNaN(start) && !isNaN(end) && end > start) {
-              totalMinutes += (end - start) / 60000;
-            }
-          });
-          return {
-            crew_id: c.crew_id,
-            full_name: c.full_name,
-            role: c.role,
-            base_airport_id: c.base_airport_id,
-            total_duty_hours: Math.round((totalMinutes / 60) * 10) / 10,
-          };
+      case 'window_airport_delay': {
+        const hubs = ['JFK', 'LGA', 'EWR'];
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December',
+        ];
+        const rows: any[] = [];
+        hubs.forEach((hub) => {
+          let cumulative = 0;
+          for (let m = 1; m <= 12; m++) {
+            const hubDelays = mockDelays.filter((d) => {
+              const f = mockFlights.find((fl) => fl.flight_id === d.flight_id);
+              if (!f || f.origin_airport_id !== hub) return false;
+              return new Date(f.scheduled_departure).getMonth() + 1 === m;
+            });
+            const totalMins = hubDelays.reduce((sum, d) => sum + d.delay_duration_minutes, 0);
+            cumulative += totalMins;
+            rows.push({
+              origin_airport_id: hub,
+              month_num: m,
+              month_name: monthNames[m - 1],
+              monthly_delay_minutes: totalMins,
+              cumulative_delay_minutes: cumulative,
+            });
+          }
+        });
+        data = rows;
+        break;
+      }
+
+      case 'window_trailing_daily_delay': {
+        const daysMap = new Map<string, number>();
+        for (let d = 1; d <= 31; d++) {
+          const dayStr = `2013-01-${d.toString().padStart(2, '0')}`;
+          daysMap.set(dayStr, 0);
+        }
+        mockDelays.forEach((d) => {
+          const f = mockFlights.find((fl) => fl.flight_id === d.flight_id);
+          if (!f) return;
+          const day = f.scheduled_departure.slice(0, 10);
+          if (daysMap.has(day)) {
+            daysMap.set(day, (daysMap.get(day) || 0) + d.delay_duration_minutes);
+          }
         });
 
-        crewHours.sort((a, b) => b.total_duty_hours - a.total_duty_hours);
-        const N = crewHours.length;
-        data = crewHours.slice(0, 50).map((c, idx) => ({
-          ...c,
-          duty_percentile_rank: N > 1 ? Math.round(((N - 1 - idx) / (N - 1)) * 1000) / 10 : 100,
+        const dailyList = Array.from(daysMap.entries()).map(([date, mins]) => ({
+          flight_date: date,
+          daily_delay_minutes: mins,
         }));
+
+        data = dailyList.map((item, idx) => {
+          const start = Math.max(0, idx - 6);
+          const slice = dailyList.slice(start, idx + 1);
+          const trailing7 = slice.reduce((sum, s) => sum + s.daily_delay_minutes, 0);
+          return {
+            flight_date: item.flight_date,
+            daily_delay_minutes: item.daily_delay_minutes,
+            trailing_7day_delay_minutes: trailing7,
+          };
+        });
+        break;
+      }
+
+      case 'window_crew': {
+        const roles: CrewRole[] = ['Captain', 'First Officer', 'Cabin Crew'];
+        data = [];
+        roles.forEach((role) => {
+          const membersInRole = mockCrew.filter((c) => c.role === role);
+          const list = membersInRole.map((c) => {
+            const assigns = mockAssignments.filter((ca) => ca.crew_id === c.crew_id);
+            let totalMinutes = 0;
+            assigns.forEach((ca) => {
+              const start = new Date(ca.duty_start_time).getTime();
+              const end = new Date(ca.duty_end_time).getTime();
+              if (!isNaN(start) && !isNaN(end) && end > start) {
+                totalMinutes += (end - start) / 60000;
+              }
+            });
+            return {
+              crew_id: c.crew_id,
+              full_name: c.full_name,
+              role: c.role,
+              base_airport_id: c.base_airport_id,
+              total_duty_hours: Math.round((totalMinutes / 60) * 10) / 10,
+            };
+          });
+
+          list.sort((a, b) => b.total_duty_hours - a.total_duty_hours);
+          const N = list.length;
+          let currRank = 1;
+          list.forEach((c, idx) => {
+            if (idx > 0 && c.total_duty_hours < list[idx - 1].total_duty_hours) {
+              currRank = idx + 1;
+            }
+            const pctRank = N > 1 ? Math.round(((currRank - 1) / (N - 1)) * 1000) / 10 : 0.0;
+            data.push({
+              ...c,
+              duty_percentile_rank: pctRank,
+            });
+          });
+        });
         break;
       }
 
@@ -2698,7 +2810,7 @@ export const apiClient = {
       if (restConflict) {
         const restFl = mockFlights.find((f) => f.flight_id === restConflict.flight_id);
         logStep(5, `SELECT ca.assignment_id FROM crew_assignments ca ... rest window (<2h) FOR UPDATE;`, 'REST_VIOLATION', `Rest interval rule violated near Flight #${restFl?.flight_number || restConflict.flight_id}`);
-        logStep(6, 'ROLLBACK;', 'FAIL', `Transaction rolled back for ${coordinator} (FAA mandatory 2-hour rest rule)`);
+        logStep(6, 'ROLLBACK;', 'FAIL', `Transaction rolled back for ${coordinator} (project rest-period constraint (minimum 2 hours))`);
         releaseCrewMutex();
         return {
           success: false,
@@ -2707,7 +2819,7 @@ export const apiClient = {
         };
       }
 
-      logStep(5, `SELECT ca.assignment_id FROM crew_assignments ca ... rest window (<2h) FOR UPDATE;`, 'CHECKING', 'FAA 2-hour rest interval verified');
+      logStep(5, `SELECT ca.assignment_id FROM crew_assignments ca ... rest window (<2h) FOR UPDATE;`, 'CHECKING', 'project rest-period constraint (minimum 2 hours) verified');
 
       // Step 6: Insert into crew_assignments
       const nextId = (mockAssignments.reduce((max, ca) => Math.max(max, ca.assignment_id), 0) || 0) + 1;

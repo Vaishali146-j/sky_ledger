@@ -285,21 +285,27 @@ export interface RouteLeaderboardItem {
   destination_airport_id: string;
   destination_city: string;
   total_flights: number;
-  delayed_flights: number;
-  delay_percentage: number;
+  delayed_count: number;
+  delayed_flights?: number;
+  delay_rate: number;
+  delay_percentage?: number;
   avg_delay_minutes: number;
   delay_rank: number;
 }
 
 export interface AircraftUtilizationItem {
-  tail_number: string;
   model: string;
-  capacity: number;
-  last_maintenance_date: string;
-  days_since_maintenance: number;
+  aircraft_count: number;
   total_flights: number;
-  total_flight_hours: number;
-  maintenance_status: 'Airworthy' | 'Upcoming' | 'Overdue';
+  avg_flights_per_aircraft: number;
+  avg_days_since_maintenance: number;
+  count_overdue: number;
+  tail_number?: string;
+  capacity?: number;
+  last_maintenance_date?: string;
+  days_since_maintenance?: number;
+  total_flight_hours?: number;
+  maintenance_status?: 'Airworthy' | 'Upcoming' | 'Overdue';
 }
 
 export interface WindowMonthlyItem {
@@ -322,6 +328,20 @@ export interface WindowAirportItem {
   month_num: number;
   departures: number;
   hub_running_total: number;
+}
+
+export interface WindowAirportCumulativeDelayItem {
+  origin_airport_id: string;
+  month_num: number;
+  month_name: string;
+  monthly_delay_minutes: number;
+  cumulative_delay_minutes: number;
+}
+
+export interface WindowTrailingDailyDelayItem {
+  flight_date: string;
+  daily_delay_minutes: number;
+  trailing_7day_delay_minutes: number;
 }
 
 export interface WindowCrewItem {

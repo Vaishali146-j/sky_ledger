@@ -125,8 +125,8 @@ export const CrewRosterAdmin: React.FC = () => {
         <div>
           <h2 className="text-base font-bold text-[#0B2E5C]">Crew Roster Assignment & Conflict Engine</h2>
           <p className="text-xs text-slate-500">
-            Mandatory FAA/Civil Aviation Roster Completeness: <strong>&ge;1 Captain</strong>,{' '}
-            <strong>&ge;1 First Officer</strong>, <strong>&ge;3 Cabin Crew</strong>. Concurrency & 2-Hour Rest Check enforced.
+            Mandatory Civil Aviation Roster Completeness: <strong>&ge;1 Captain</strong>,{' '}
+            <strong>&ge;1 First Officer</strong>, <strong>&ge;3 Cabin Crew</strong>. Concurrency & project rest-period constraint (minimum 2 hours) enforced.
           </p>
         </div>
       </div>

@@ -100,8 +100,8 @@ export const VivaDemoGuide: React.FC<VivaDemoGuideProps> = ({ onNavigateTab }) =
       num: 11,
       title: 'Flight Roster Assignment Matrix & Standby Suggestions',
       tab: 'admin-roster',
-      concept: 'FAA Roster Completeness (≥1 Captain, ≥1 F/O, ≥3 Cabin) & 2h Rest Rule',
-      desc: 'Roster completeness checklist for flights, intelligent conflict-free standby suggestions, and conflict checking on crew assignment.',
+      concept: 'Roster Completeness (≥1 Captain, ≥1 F/O, ≥3 Cabin) & project rest-period constraint (minimum 2 hours)',
+      desc: 'Roster completeness checklist for flights, intelligent conflict-free standby suggestions, and project rest-period constraint (minimum 2 hours) enforcement.',
     },
     {
       num: 12,
@@ -121,8 +121,8 @@ export const VivaDemoGuide: React.FC<VivaDemoGuideProps> = ({ onNavigateTab }) =
       num: 14,
       title: 'Business Intelligence & Window Functions Hub',
       tab: 'admin-analytics',
-      concept: 'Advanced Window Functions: DENSE_RANK(), SUM() OVER, AVG() OVER, PERCENT_RANK()',
-      desc: 'Route delay leaderboard, aircraft airworthiness check via DATEDIFF (>180d warning), monthly cumulative delay trend, and 7-day moving averages.',
+      concept: 'Advanced Window Functions: RANK(), SUM() OVER, AVG() OVER, PERCENT_RANK()',
+      desc: 'Route delay leaderboard (RANK), fleet airworthiness grouped by model, hub cumulative delays, trailing 7-day rolling totals, and crew percentile ranks.',
     },
     {
       num: 15,
